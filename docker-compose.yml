@@ -1,0 +1,113 @@
+version: '3.1'
+
+x-common:
+  &common
+  stdin_open: &common-stdin true # docker run -i
+  tty: &common-tty true
+  restart: &common-restart always
+  extra_hosts: &common-extra_hosts
+    - "host.docker.internal:host-gateway"
+  image: &common-image
+    airflow-milk:1.0.0
+  volumes:
+    &common-vol
+    - ${NFS_AIRFLOWDATA}/dags:/usr/local/airflow/dags
+    - ${NFS_AIRFLOWDATA}/logs:/usr/local/airflow/logs
+    - ./config:/usr/local/airflow/config
+    - ./plugins:/usr/local/airflow/plugins
+    - /var/run/docker.sock:/var/run/docker.sock
+  env_file:
+    &common-env
+    - .env
+  networks:
+    &common-network
+    - app-tier
+
+networks:
+  app-tier:
+    driver: bridge 
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - ./sql:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "airflow" ]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+    ports:
+      - 5432:5432
+    networks:
+      - app-tier
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8990:8080
+    networks:
+      - app-tier
+  airflow-webserver:
+    <<: *common
+    entrypoint: config/webserver_entry.sh
+    #mem_limit: 6g
+    #memswap_limit: 6g
+    ports:
+      - 8080:8080
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  airflow-scheduler:
+    <<: *common
+    entrypoint: config/scheduler_entry.sh
+    #mem_limit: 6g
+    #memswap_limit: 6g
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:8974/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    ports:
+      - 8974:8974
+
+  airflow-worker:
+    <<: *common
+    hostname:  ${ALIAS_NAME}
+    entrypoint: config/worker_entry.sh
+    ports:
+      - 8082:8082
+      - 8793:8793
+    #mem_limit: 6g
+    #memswap_limit: 6g
+    healthcheck:
+      # yamllint disable rule:line-length
+      test:
+        - "CMD-SHELL"
+        - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}" || celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+
+
+  redis:
+    image: redis:5.0.5
+    #cpus: 0.5
+    #mem_reservation: "10M"
+    ##mem_limit: "250M"
+    ports:
+      - 6379:6379
+
+    networks:
+      - app-tier

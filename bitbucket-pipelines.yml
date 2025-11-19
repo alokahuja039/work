@@ -1,0 +1,79 @@
+# This is an example Starter pipeline configuration
+# Use a skeleton to build, test and deploy using manual and parallel steps
+# -----
+# You can specify a custom docker image from Docker Hub as your build environment.
+
+image: atlassian/default-image:3
+
+pipelines:
+  branches:
+    develop:
+      - parallel:
+        - step:
+            name: 'Build and Test'
+            script:
+              - echo "Your build and test goes here..."
+        - step:
+            name: 'Lint'
+            script:
+              - echo "Your linting goes here..."
+        - step:
+            name: 'Security scan'
+            script:
+              - echo "Your security scan goes here..."
+
+      # The following deployment steps will be executed for each pipeline run. To configure your steps and conditionally deploy see https://support.atlassian.com/bitbucket-cloud/docs/configure-bitbucket-pipelinesyml/
+      - step:
+          name: 'Deployment to Staging'
+          deployment: staging
+          trigger: 'manual'
+          size: 4x
+          runtime:
+              cloud:
+                atlassian-ip-ranges: true          
+          script:
+                - echo "Your deployment to stagin script goes here..."
+                - cat shellhub_fingerprint >> ~/.ssh/known_hosts
+                - (umask  077 ; echo $BB_PIPELINES_KEY | base64 --decode > ~/.ssh/id_rsa)
+                - ssh -i ~/.ssh/id_rsa -p ${SHELLHUB_PORT} -tt ${BB_PIPELINES_USER}@${SHELLHUB_HOST} "cd /tmp; mkdir -p airflow/"
+                - python3 deployments/deploy.py deploy_files
+                - scp -pr -i ~/.ssh/id_rsa -P ${SHELLHUB_PORT} deployments/deploy/* ${BB_PIPELINES_USER}@${SHELLHUB_HOST}:/tmp/airflow/dags
+                - TARGET_HOSTS=(${STG_TARGET_HOSTS})
+                - echo "Targets:${TARGET_HOSTS}"
+                - for TARGET_HOST in "${TARGET_HOSTS[@]}"; do ssh -p ${SHELLHUB_PORT} -tt ${BB_PIPELINES_USER}@${SHELLHUB_HOST} "scp -pr -o 'UserKnownHostsFile=/dev/null' -o 'StrictHostKeyChecking=no' /tmp/airflow/dags/* ${TARGET_HOST}:/tmp/dags; ssh -o 'UserKnownHostsFile=/dev/null' -o 'StrictHostKeyChecking=no' -tt ${TARGET_HOST} \"pwd; sudo -u worker-admin -i cp -r /tmp/dags/*  /SharedData/dags; rm -fr /tmp/dags/*;\"" ;done
+                - ssh -i ~/.ssh/id_rsa -p ${SHELLHUB_PORT} -tt ${BB_PIPELINES_USER}@${SHELLHUB_HOST} "rm -r /tmp/airflow"
+    main:
+          - parallel:
+            - step:
+                name: 'Build and Test'
+                script:
+                  - echo "Your build and test goes here..."
+            - step:
+                name: 'Lint'
+                script:
+                  - echo "Your linting goes here..."
+            - step:
+                name: 'Security scan'
+                script:
+                  - echo "Your security scan goes here..."
+
+          # The following deployment steps will be executed for each pipeline run. To configure your steps and conditionally deploy see https://support.atlassian.com/bitbucket-cloud/docs/configure-bitbucket-pipelinesyml/
+          - step:
+              name: 'Deployment to Production'
+              deployment: production
+              trigger: 'manual'
+              size: 4x
+              runtime:
+                cloud:
+                  atlassian-ip-ranges: true
+              script:
+                - echo "Your deployment to production script goes here..."
+                - cat shellhub_fingerprint >> ~/.ssh/known_hosts
+                - (umask  077 ; echo $BB_PIPELINES_KEY | base64 --decode > ~/.ssh/id_rsa)
+                - ssh -i ~/.ssh/id_rsa -p ${SHELLHUB_PORT} -tt ${BB_PIPELINES_USER}@${SHELLHUB_HOST} "cd /tmp; mkdir -p airflow/"
+                - python3 deployments/deploy.py deploy_files
+                - scp -pr -i ~/.ssh/id_rsa -P ${SHELLHUB_PORT} deployments/deploy/* ${BB_PIPELINES_USER}@${SHELLHUB_HOST}:/tmp/airflow/dags
+                - TARGET_HOSTS=(${PRO_TARGET_HOSTS})
+                - echo "Targets:${TARGET_HOSTS}"
+                - for TARGET_HOST in "${TARGET_HOSTS[@]}"; do ssh -p ${SHELLHUB_PORT} -tt ${BB_PIPELINES_USER}@${SHELLHUB_HOST} "scp -pr -o 'UserKnownHostsFile=/dev/null' -o 'StrictHostKeyChecking=no' /tmp/airflow/dags/* ${TARGET_HOST}:/tmp/dags; ssh -o 'UserKnownHostsFile=/dev/null' -o 'StrictHostKeyChecking=no' -tt ${TARGET_HOST} \"pwd; sudo -u worker-admin -i cp -r /tmp/dags/*  /SharedData/dags; rm -fr /tmp/dags/*;\"" ;done
+                - ssh -i ~/.ssh/id_rsa -p ${SHELLHUB_PORT} -tt ${BB_PIPELINES_USER}@${SHELLHUB_HOST} "rm -r /tmp/airflow"
