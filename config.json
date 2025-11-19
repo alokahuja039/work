@@ -1,0 +1,14 @@
+{
+    "files_upload": [
+        {
+            "file":"dags/select_milk_producer/SMP_CDFSW_CORE_KPI_FILE/config/SMP_CDFSW_CORE_KPI_FILE_RAW_pro.json",
+            "dir": "dags/select_milk_producer/SMP_CDFSW_CORE_KPI_FILE/config/"
+        },{
+            "file": "dags/select_milk_producer/SMP_EXT_GOALS_FILES/config/SMP_EXT_GOALS_FILES_RAW_pro.json",
+            "dir":"dags/select_milk_producer/SMP_EXT_GOALS_FILES/config/"
+        },{
+            "file":"dags/select_milk_producer/SMP_EXT_OSHA_FILES/config/SMP_EXT_OSHA_FILES_RAW_pro.json",
+            "dir": "dags/select_milk_producer/SMP_EXT_OSHA_FILES/config/"
+        }
+    ]
+}
